@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RetailRocket Engine</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; text-align: center; padding: 50px; }
+        select { padding: 10px; border-radius: 5px; background: #1e293b; color: white; border: 1px solid #38bdf8; margin-bottom: 20px; }
+        .grid { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 30px; min-height: 200px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 15px; cursor: pointer; transition: 0.3s; width: 180px; border: 1px solid #334155; }
+        .card:hover { transform: translateY(-5px); border-color: #38bdf8; background: #1e293b; }
+        .icon { font-size: 40px; color: #38bdf8; margin-bottom: 10px; }
+        .hidden-id { font-size: 11px; color: #64748b; margin-top: 8px; display: block; }
+        strong { color: #f8fafc; display: block; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>RetailRocket Engine</h1>
+    <p>Select a User ID to generate secret product recommendations</p>
+    
+    <select id="userSelect" onchange="fetchRecs()">
+        <option value="" disabled selected>Select a User</option>
+        {% for user in users %}
+        <option value="{{user}}">{{user}}</option>
+        {% endfor %}
+    </select>
+
+    <div style="margin-top:10px;">
+        <button onclick="prewarmTop()" style="padding:8px 12px; border-radius:6px; background:#0ea5e9; color:#012; border:none; cursor:pointer;">Prewarm Top Users</button>
+        <button onclick="refreshCurrent()" style="padding:8px 12px; border-radius:6px; background:#34d399; color:#012; border:none; cursor:pointer; margin-left:8px;">Refresh For Selected User</button>
+        <button id="signinBtn" onclick="toggleSignIn()" style="padding:8px 12px; border-radius:6px; background:#f59e0b; color:#012; border:none; cursor:pointer; margin-left:8px;">Sign In</button>
+    </div>
+
+    <div id="sessionPanel" style="margin-top:16px; text-align:left; max-width:760px; margin-left:auto; margin-right:auto;">
+        <strong>Session Panel</strong>
+        <div id="sessionStats" style="color:#cbd5e1; margin-top:6px;">Not signed in.</div>
+        <div id="ctrPanel" style="font-size:11px; color:#94a3b8; margin-top:8px; max-height:200px; overflow-y:auto;"></div>
+        <div style="margin-top:6px;"><button onclick="clearSession()" style="padding:6px 10px; border-radius:6px; background:#ef4444; color:white; border:none; cursor:pointer;">Clear Session</button></div>
+    </div>
+
+    <div id="loaderPanel" style="margin-top:16px; text-align:left; max-width:760px; margin-left:auto; margin-right:auto;">
+        <strong>Dataset Status</strong>
+        <div id="loaderStatus" style="color:#cbd5e1; margin-top:6px; font-size:12px;">Loading...</div>
+        <div style="margin-top:6px;"><button id="toggleLoaderBtn" onclick="toggleLoader()" style="padding:6px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;">Switch to Full Dataset</button></div>
+    </div>
+
+    <div id="recGrid" class="grid"></div>
+
+    <script>
+        async function fetchRecs() {
+            const userId = document.getElementById('userSelect').value;
+            const grid = document.getElementById('recGrid');
+            grid.innerHTML = '<p>Loading recommendations...</p>';
+            
+            try {
+                const res = await fetch(`/get_recommendations/${userId}`);
+                const data = await res.json();
+                
+                if (data.length === 0) {
+                    grid.innerHTML = '<p>No recommendations found for this user.</p>';
+                    return;
+                }
+
+                grid.innerHTML = data.map(item => `
+                    <div class="card" onclick="handleCardClick(${item.id})">
+                        <img src="${item.image_url}" alt="thumb" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:10px;"/>
+                        <strong>${item.display_name}</strong>
+                        <span class="hidden-id">Secret ID: ${item.id}</span>
+                        <div style="font-size:11px; color:#86efac; margin-top:6px;">Cached: <span class="cache-badge" data-user="${userId}">...</span></div>
+                    </div>
+                `).join('');
+                // Ask cache status for the user
+                updateCacheBadge(userId)
+            } catch (err) {
+                grid.innerHTML = '<p style="color:red;">Error fetching data from backend.</p>';
+            }
+        }
+
+        async function updateCacheBadge(userId) {
+            try {
+                const res = await fetch(`/cache_status/${userId}`);
+                const js = await res.json();
+                document.querySelectorAll('.cache-badge').forEach(el => { el.textContent = js.cached ? 'Yes' : 'No' })
+            } catch (e) {
+                document.querySelectorAll('.cache-badge').forEach(el => { el.textContent = 'Err' })
+            }
+        }
+
+        // Periodically refresh session stats
+        setInterval(async () => {
+            try {
+                const res = await fetch('/session_status');
+                const js = await res.json();
+                if (js.signed_in) {
+                    document.getElementById('sessionStats').textContent = `Signed in · items: ${js.session_items.length} · views: ${js.total_views} · clicks: ${js.total_clicks}`
+                    // Display CTR per item
+                    let ctr_html = '<div>CTR by item:</div>';
+                    for (let [itemId, ctr] of Object.entries(js.per_item_ctr)) {
+                        ctr_html += `<div>Item ${itemId}: ${(ctr * 100).toFixed(1)}%</div>`;
+                    }
+                    document.getElementById('ctrPanel').innerHTML = ctr_html;
+                } else {
+                    document.getElementById('sessionStats').textContent = 'Not signed in.'
+                    document.getElementById('ctrPanel').innerHTML = '';
+                }
+            } catch (e) {}
+        }, 2000);
+
+        // Periodically refresh loader status
+        setInterval(async () => {
+            try {
+                const res = await fetch('/loader_status');
+                const js = await res.json();
+                document.getElementById('loaderStatus').textContent = `${js.use_full_dataset ? 'Full dataset' : 'Sample'} · ${js.events_count} events loaded`;
+                document.getElementById('toggleLoaderBtn').textContent = js.use_full_dataset ? 'Switch to Sample' : 'Switch to Full Dataset';
+            } catch (e) {}
+        }, 5000);
+
+        async function prewarmTop() {
+            const res = await fetch('/prewarm_top_users', { method: 'POST' });
+            const js = await res.json();
+            alert('Prewarm started for ' + js.n + ' users');
+        }
+
+        async function refreshCurrent() {
+            const userId = document.getElementById('userSelect').value;
+            if (!userId) { alert('Select a user first'); return }
+            const res = await fetch(`/refresh_recs/${userId}`, { method: 'POST' });
+            const js = await res.json();
+            alert('Refreshed; new recs: ' + js.recs.join(','));
+            fetchRecs();
+        }
+
+        async function handleCardClick(itemId) {
+            // If signed in, record session event and refresh session recs
+            try {
+                const s = await fetch('/session_status');
+                const sj = await s.json();
+                if (sj.signed_in) {
+                    await fetch('/session_event', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ item_id: itemId, event: 'click' })
+                    });
+                    // refresh session recs
+                    const r = await fetch('/get_session_recommendations');
+                    const data = await r.json();
+                    renderSessionRecs(data);
+                    return;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            alert('System ID: ' + itemId);
+        }
+
+        async function clearSession() {
+            // sign out then sign back in to clear ephemeral session
+            await fetch('/signout', { method: 'POST' });
+            await fetch('/signin', { method: 'POST' });
+            document.getElementById('sessionStats').textContent = 'Session cleared.';
+            document.getElementById('ctrPanel').innerHTML = '';
+        }
+
+        async function toggleLoader() {
+            try {
+                const res = await fetch('/loader_status');
+                const status = await res.json();
+                const r2 = await fetch('/switch_loader', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ use_full: !status.use_full_dataset })
+                });
+                const result = await r2.json();
+                if (r2.ok) {
+                    alert(`Switched to ${result.use_full ? 'full' : 'sample'} dataset. ${result.events_count} events loaded.`);
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (e) {
+                alert('Toggle failed: ' + e.message);
+            }
+        }
+
+        function renderSessionRecs(data) {
+            const grid = document.getElementById('recGrid');
+            if (!data || data.length === 0) {
+                grid.innerHTML = '<p>No session recommendations yet.</p>';
+                return;
+            }
+            grid.innerHTML = data.map(item => `
+                <div class="card" onclick="handleCardClick(${item.id})">
+                    <img src="${item.image_url}" alt="thumb" style="width:100%; height:120px; object-fit:cover; border-radius:8px; margin-bottom:10px;"/>
+                    <strong>${item.display_name}</strong>
+                    <span class="hidden-id">Secret ID: ${item.id}</span>
+                </div>
+            `).join('');
+        }
+
+        async function toggleSignIn() {
+            const s = await fetch('/session_status');
+            const sj = await s.json();
+            if (sj.signed_in) {
+                await fetch('/signout', { method: 'POST' });
+                document.getElementById('signinBtn').textContent = 'Sign In';
+                alert('Signed out');
+            } else {
+                await fetch('/signin', { method: 'POST' });
+                document.getElementById('signinBtn').textContent = 'Sign Out';
+                alert('Signed in (disposable session active)');
+            }
+        }
+
+        // On load, update sign-in button
+        (async function(){
+            try{
+                const s = await fetch('/session_status');
+                const sj = await s.json();
+                document.getElementById('signinBtn').textContent = sj.signed_in ? 'Sign Out' : 'Sign In';
+            }catch(e){ }
+        })();
+    </script>
+</body>
+</html>

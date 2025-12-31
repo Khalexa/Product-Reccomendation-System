@@ -1,0 +1,6 @@
+streamlit
+kagglehub
+scikit-learn
+joblib
+requests
+pytest
