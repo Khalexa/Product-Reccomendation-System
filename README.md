@@ -179,10 +179,4 @@ python app.py
 # Open http://127.0.0.1:5000
 # Demo: Sign In → Click Items → Watch CTR & Recommendations Update → Sign Out
 
-# Terminal 2 (optional, for API inspection)
-curl http://127.0.0.1:5000/loader_status
-curl http://127.0.0.1:5000/get_recommendations/2  # See precomputed recs for user 2
 ```
-
----
-
