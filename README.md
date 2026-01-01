@@ -20,10 +20,10 @@ python scripts/generate_synthetic_sample.py
 
 **Expected output:**
 ```
-✅ Generated 500 items
-✅ Generated 200 users
-✅ Generated 5000 events
-✅ Sample saved to data/processed/
+Generated 500 items
+Generated 200 users
+Generated 5000 events
+Sample saved to data/processed/
 ```
 
 **What it creates:**
@@ -40,11 +40,11 @@ python scripts/prewarm_cache.py --top 20 --k 6
 
 **Expected output:**
 ```
-✅ Loaded sample data: 200 users, 500 items, 5000 events
-✅ Trained recommender
-✅ Computing recommendations for top 20 users...
-✅ Persisted to SQLite cache
-✅ Cache ready with 20 users
+Loaded sample data: 200 users, 500 items, 5000 events
+Trained recommender
+Computing recommendations for top 20 users...
+Persisted to SQLite cache
+Cache ready with 20 users
 ```
 
 **What it does:**
@@ -82,7 +82,7 @@ WARNING: This is a development server. Do not use in production.
 
 ---
 
-## Demo Flow (What to Show Your Professor)
+## Demo Flow
 
 ### Demo 1: User-Based Recommendations (Precomputed)
 1. Click dropdown "Select User"
@@ -97,7 +97,7 @@ WARNING: This is a development server. Do not use in production.
 ### Demo 2: Session-Based Recommendations (Real-Time)
 1. Click **"Sign In"** button
 2. **Session Panel** appears on right showing:
-   - ✅ Signed In
+   - Signed In
    - Items: 0
    - Total Clicks: 0
    - Total Views: 0
